@@ -58,7 +58,6 @@
 				var options;     // sortable options
 				var $helper;     // helper element - the one thats being dragged around with the mouse pointer
 				var $original;   // original element
-				var $target;     // last best candidate
 				var isGrid       = false;
 				var onSort       = $parse($attrs.svOnSort);
 
@@ -82,7 +81,7 @@
 					if(isGrid === null)
 						throw 'Invalid value of sv-grid attribute';
 				}
-				else{
+				else {
 					// check if at least one of the lists have a grid like layout
 					$scope.$watchCollection(function(){
 						return getSortableElements(mapKey);
@@ -121,7 +120,8 @@
 					if(opts.tolerance === 'element')
 						mouse = {
 							x: ~~(svRect.left + svRect.width/2),
-							y: ~~(svRect.top + svRect.height/2)
+							y: ~~(svRect.top + svRect.height/2),
+							offset: {x: 0, y: 0}
 						};
 
 					sortingInProgress = true;
@@ -239,7 +239,7 @@
 
 					candidates.forEach(function(cand, index){
 						if(index === 0 && !cand.placeholder && !cand.container){
-							$target = cand;
+							that.$target = cand;
 							cand.element.addClass('sv-candidate');
 							if(cand.after)
 								cand.element.after($placeholder);
@@ -247,7 +247,7 @@
 								insertElementBefore(cand.element, $placeholder);
 						}
 						else if(index === 0 && cand.container){
-							$target = cand;
+							that.$target = cand;
 							cand.element.append($placeholder);
 						}
 						else
@@ -258,7 +258,7 @@
 				this.$drop = function(originatingPart, index, options){
 					if(!$placeholder) return;
 
-					if(options.revert && !($target && $target.view && $target.view.noRevert)){
+					if(options.revert && !(that.$target && that.$target.view && that.$target.view.noRevert)){
 						var placeholderRect = $placeholder[0].getBoundingClientRect();
 						var helperRect = $helper[0].getBoundingClientRect();
 						var distance = Math.sqrt(
@@ -298,31 +298,35 @@
 						onStop($scope, {
 							$part: originatingPart.model(originatingPart.scope),
 							$index: index,
-							$item: originatingPart.model(originatingPart.scope)[index]
+							$item: originatingPart.model(originatingPart.scope)[index],
+							$partToScope: that.$target.view.scope,
+							$partFromScope: originatingPart.scope
 						});
 
-						if($target){
-							$target.element.removeClass('sv-candidate');
+						if(that.$target){
+							that.$target.element.removeClass('sv-candidate');
 							var spliced = originatingPart.model(originatingPart.scope).splice(index, 1);
-							var targetIndex = $target.targetIndex;
-							if($target.view === originatingPart && $target.targetIndex > index)
-								targetIndex--;
-							if($target.after)
-								targetIndex++;
-							$target.view.model($target.view.scope).splice(targetIndex, 0, spliced[0]);
+							var targetIndex = that.$target.targetIndex;
+							// if(that.$target.view === originatingPart && that.$target.targetIndex > index)
+							// 	targetIndex--;
+							// if(that.$target.after)
+							// 	targetIndex++;
+							that.$target.view.model(that.$target.view.scope).splice(targetIndex, 0, spliced[0]);
 
 							// sv-on-sort callback
-							if($target.view !== originatingPart || index !== targetIndex)
+							if(that.$target.view !== originatingPart || index !== targetIndex)
 								onSort($scope, {
-									$partTo: $target.view.model($target.view.scope),
+									$partTo: that.$target.view.model(that.$target.view.scope),
 									$partFrom: originatingPart.model(originatingPart.scope),
 									$item: spliced[0],
 									$indexTo: targetIndex,
-									$indexFrom: index
+									$indexFrom: index,
+									$partToScope: that.$target.view.scope,
+									$partFromScope: originatingPart.scope
 								});
 
 						}
-						$target = void 0;
+						that.$target = void 0;
 
 						$scope.$root && $scope.$root.$$phase || $scope.$apply();
 					}
@@ -447,6 +451,9 @@
 					if($controllers[1].sortingInProgress()) return;
 					if(e.button != 0 && e.type === 'mousedown') return;
 
+					var svStopAttr = handle[0].attributes['sv-stop'];
+					if(svStopAttr && svStopAttr.value === 'true') return;
+
 					var svHandleDisabledAttr = e.target.attributes['sv-handle-disabled'];
 					if(svHandleDisabledAttr && svHandleDisabledAttr.value === 'true') return;
 
@@ -486,22 +493,43 @@
 					}
 
 					clone[0].reposition = function(coords){
+
+						var body = document.body;
+
 						var targetLeft = coords.x;
 						var targetTop = coords.y;
 						var helperRect = clone[0].getBoundingClientRect();
+						var myParent = getParentPositioned($element[0]);
 
-						var body = document.body;
+						var scrollParent = (function _scrollParent(element) {
+							if (
+								element.parentNode.scrollHeight > element.parentNode.clientHeight ||
+								element.parentNode === document.body
+							) {
+								return element.parentNode;
+							} else {
+								return _scrollParent(element.parentNode);
+							}
+						})($element[0]);
 
 						if(containmentRect){
 							if(targetTop < containmentRect.top + body.scrollTop) // top boundary
 								targetTop = containmentRect.top + body.scrollTop;
+								scrollParent.scrollBy(0, ~~((coords.y - targetTop)/2)); // scroll on top
 							if(targetTop + helperRect.height > containmentRect.top + body.scrollTop + containmentRect.height) // bottom boundary
 								targetTop = containmentRect.top + body.scrollTop + containmentRect.height - helperRect.height;
+								scrollParent.scrollBy(0, ~~((coords.y - targetTop)/2)); // scroll on bottom
 							if(targetLeft < containmentRect.left + body.scrollLeft) // left boundary
 								targetLeft = containmentRect.left + body.scrollLeft;
 							if(targetLeft + helperRect.width > containmentRect.left + body.scrollLeft + containmentRect.width) // right boundary
 								targetLeft = containmentRect.left + body.scrollLeft + containmentRect.width - helperRect.width;
 						}
+
+						if(myParent){
+							targetTop = targetTop - myParent.top;
+							targetLeft = targetLeft - myParent.left;
+						}
+
 						this.style.left = targetLeft - body.scrollLeft + 'px';
 						this.style.top = targetTop - body.scrollTop + 'px';
 					};
@@ -528,6 +556,7 @@
 							$element.parent().prepend(clone);
 							moveExecuted = true;
 						}
+						// opts, mouse, svElement, svOriginal, svPlaceholder, originatingPart, originatingIndex
 						$controllers[1].$moveUpdate(opts, {
 							x: e.clientX,
 							y: e.clientY,
@@ -649,6 +678,20 @@
 		if(element instanceof angular.element) element = element[0];
 		if(matchingFunction !== null)
 			return element[matchingFunction](selector);
+	}
+
+	function getParentPositioned(el){
+		el = el.parentNode;
+
+		while(el !== document.documentElement){
+			var pos = angular.element(el).css("position");
+			if(pos != 'static' && pos != ''){
+				return el.getBoundingClientRect();
+			} else{
+				el = el.parentNode;
+			}
+		}
+		return null;
 	}
 
 	var closestElement = angular.element.prototype.closest || function (selector){
