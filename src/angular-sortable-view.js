@@ -167,7 +167,7 @@
 					});
 
 					// ------ manage candidates
-					getSortableElements(mapKey).forEach(function(se, index){
+					getSortableElements(mapKey).forEach(function(se){
 						if(opts.containment != null){
 							// TODO: optimize this since it could be calculated only once when the moving begins
 							if(
@@ -440,7 +440,6 @@
 					}
 				});
 
-				var body = angular.element(document.body);
 				var html = angular.element(document.documentElement);
 
 				var moveExecuted;
@@ -502,9 +501,12 @@
 						var myParent = getParentPositioned($element[0]);
 
 						var scrollParent = (function _scrollParent(element) {
+							var overflowY = window.getComputedStyle(element.parentNode).overflowY;
+
 							if (
-								element.parentNode.scrollHeight > element.parentNode.clientHeight ||
-								element.parentNode === document.body
+								element.parentNode === document.body ||
+								overflowY === 'scroll' ||
+								overflowY === 'auto'
 							) {
 								return element.parentNode;
 							} else {
@@ -539,7 +541,7 @@
 						y: (e.clientY - clientRect.top)/clientRect.height
 					};
 					html.addClass('sv-sorting-in-progress');
-					html.on('mousemove touchmove', onMousemove).on('mouseup touchend touchcancel', function mouseup(e){
+					html.on('mousemove touchmove', onMousemove).on('mouseup touchend touchcancel', function mouseup(){
 						html.off('mousemove touchmove', onMousemove);
 						html.off('mouseup touchend touchcancel', mouseup);
 						html.removeClass('sv-sorting-in-progress');
