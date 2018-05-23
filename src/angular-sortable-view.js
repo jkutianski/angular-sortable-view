@@ -11,10 +11,14 @@
 
 	var module = angular.module('angular-sortable-view', []);
 	module.directive('svRoot', [function(){
+		var sortingInProgress;
+		var ROOTS_MAP = Object.create(null);
+		// window.ROOTS_MAP = ROOTS_MAP; // for debug purposes
+
 		function shouldBeAfter(elem, pointer, isGrid){
 			return isGrid ? elem.x - pointer.x < 0 : elem.y - pointer.y < 0;
 		}
-		function getSortableElements(key){
+		function getSortableElements(key){ 
 			return ROOTS_MAP[key];
 		}
 		function removeSortableElements(key){
@@ -42,15 +46,30 @@
 			}));
 		}
 
-		var sortingInProgress;
-		var ROOTS_MAP = Object.create(null);
-		// window.ROOTS_MAP = ROOTS_MAP; // for debug purposes
-
 		return {
 			restrict: 'A',
 			controller: ['$scope', '$attrs', '$interpolate', '$parse', function($scope, $attrs, $interpolate, $parse){
 				var mapKey = $interpolate($attrs.svRoot)($scope) || $scope.$id;
 				if(!ROOTS_MAP[mapKey]) ROOTS_MAP[mapKey] = [];
+
+
+				$attrs.$observe('svRoot', function (value) {
+
+					if(mapKey !== value) {
+						var lastKey = mapKey;
+						mapKey = value;
+
+						if(!ROOTS_MAP[mapKey]) ROOTS_MAP[mapKey] = [];
+
+						ROOTS_MAP[mapKey] = getSortableElements(lastKey).filter(function (sortable) {
+							return sortable.getPart().element.attr('sv-root') === mapKey;
+						});
+
+						ROOTS_MAP[lastKey] = getSortableElements(lastKey).filter(function (sortable) {
+							return sortable.getPart().element.attr('sv-root') !== mapKey;
+						});
+					}
+				});
 
 				var that         = this;
 				var candidates;  // set of possible destinations
@@ -80,8 +99,7 @@
 					isGrid = $attrs.svGrid === "true" ? true : $attrs.svGrid === "false" ? false : null;
 					if(isGrid === null)
 						throw 'Invalid value of sv-grid attribute';
-				}
-				else {
+				} else {
 					// check if at least one of the lists have a grid like layout
 					$scope.$watchCollection(function(){
 						return getSortableElements(mapKey);
@@ -355,7 +373,7 @@
 			controller: ['$scope', function($scope){
 				$scope.$ctrl = this;
 				this.getPart = function(){
-					return $scope.part;
+					return $scope.part;				
 				};
 				this.$drop = function(index, options){
 					$scope.$sortableRoot.$drop($scope.part, index, options);
@@ -387,7 +405,9 @@
 					getPart: $scope.$ctrl.getPart,
 					container: true,
 					centerVariant: $attrs.svCenter || 'both',
+					disabled: $attrs.svDisabled === 'true',
 				};
+
 				$sortable.addToSortableElements(sortablePart);
 				$scope.$on('$destroy', function(){
 					$sortable.removeFromSortableElements(sortablePart);
@@ -404,13 +424,16 @@
 				$scope.$ctrl = this;
 			}],
 			link: function($scope, $element, $attrs, $controllers){
+
 				var sortableElement = {
 					element: $element,
 					getPart: $controllers[0].getPart,
 					getIndex: function(){
 						return $scope.$index;
-					}
+					},
+					disabled: $attrs.svDisabled === 'true',
 				};
+
 				$controllers[1].addToSortableElements(sortableElement);
 				$scope.$on('$destroy', function(){
 					$controllers[1].removeFromSortableElements(sortableElement);
@@ -665,14 +688,14 @@
 	}
 
 	var dde = document.documentElement,
-	matchingFunction = dde.matches ? 'matches' :
-						dde.matchesSelector ? 'matchesSelector' :
-						dde.webkitMatches ? 'webkitMatches' :
-						dde.webkitMatchesSelector ? 'webkitMatchesSelector' :
-						dde.msMatches ? 'msMatches' :
-						dde.msMatchesSelector ? 'msMatchesSelector' :
-						dde.mozMatches ? 'mozMatches' :
-						dde.mozMatchesSelector ? 'mozMatchesSelector' : null;
+	    matchingFunction = dde.matches ? 'matches' :
+		    dde.matchesSelector ? 'matchesSelector' :
+		    dde.webkitMatches ? 'webkitMatches' :
+		    dde.webkitMatchesSelector ? 'webkitMatchesSelector' :
+		    dde.msMatches ? 'msMatches' :
+		    dde.msMatchesSelector ? 'msMatchesSelector' :
+		    dde.mozMatches ? 'mozMatches' :
+		    dde.mozMatchesSelector ? 'mozMatchesSelector' : null;
 	if(matchingFunction == null)
 		throw 'This browser doesn\'t support the HTMLElement.matches method';
 
